@@ -58,7 +58,17 @@ const PromotionsDeclaration = new SimpleSchema({
     type: PromotionType
   },
   "allowOperators": Array,
-  "allowOperators.$": String
+  "allowOperators.$": String,
+  "getCombinationOfPromotions": Function,
+  "combinationFilters": Array,
+  "combinationFilters.$": {
+    type: Object,
+    blackbox: true
+  },
+  "utils": {
+    type: Object,
+    blackbox: true
+  }
 });
 
 export const promotions = {
@@ -70,18 +80,10 @@ export const promotions = {
   qualifiers: [],
   promotionTypes: [],
   stackabilities: [],
-  allowOperators: [
-    "equal",
-    "notEqual",
-    "lessThan",
-    "lessThanInclusive",
-    "greaterThan",
-    "greaterThanInclusive",
-    "in",
-    "notIn",
-    "contains",
-    "doesNotContain"
-  ]
+  getCombinationOfPromotions: () => {},
+  combinationFilters: [],
+  allowOperators: ["equal", "notEqual", "lessThan", "lessThanInclusive", "greaterThan", "greaterThanInclusive", "in", "notIn", "contains", "doesNotContain"],
+  utils: {}
 };
 
 /**
@@ -91,7 +93,19 @@ export const promotions = {
  */
 export function registerPluginHandlerForPromotions({ promotions: pluginPromotions }) {
   if (pluginPromotions) {
-    const { triggers, actions, enhancers, schemaExtensions, operators, qualifiers, stackabilities, promotionTypes } = pluginPromotions;
+    const {
+      triggers,
+      actions,
+      enhancers,
+      schemaExtensions,
+      operators,
+      qualifiers,
+      stackabilities,
+      promotionTypes,
+      getCombinationOfPromotions,
+      combinationFilters,
+      utils
+    } = pluginPromotions;
     if (triggers) {
       promotions.triggers = _.uniqBy(promotions.triggers.concat(triggers), "key");
     }
@@ -115,6 +129,15 @@ export function registerPluginHandlerForPromotions({ promotions: pluginPromotion
     }
     if (promotionTypes) {
       promotions.promotionTypes = promotions.promotionTypes.concat(promotionTypes);
+    }
+    if (getCombinationOfPromotions) {
+      promotions.getCombinationOfPromotions = getCombinationOfPromotions;
+    }
+    if (combinationFilters) {
+      promotions.combinationFilters = _.uniqBy(promotions.combinationFilters.concat(combinationFilters), "key");
+    }
+    if (utils) {
+      promotions.utils = { ...promotions.utils, ...utils };
     }
   }
   PromotionsDeclaration.validate(promotions);

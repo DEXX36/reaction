@@ -1,11 +1,15 @@
 /* eslint-disable no-await-in-loop */
 import { createRequire } from "module";
 import Logger from "@reactioncommerce/logger";
-import Random from "@reactioncommerce/random";
+import ReactionError from "@reactioncommerce/reaction-error";
 import _ from "lodash";
-import canBeApplied from "../utils/canBeApplied.js";
 import enhanceCart from "../utils/enhanceCart.js";
 import isPromotionExpired from "../utils/isPromotionExpired.js";
+import createCartMessage from "../utils/createCartMessage.js";
+import canAddToCartMessages from "../utils/canAddCartMessage.js";
+import triggerHandler from "./triggerHandler.js";
+import applyCombinationPromotions from "./applyCombinationPromotions.js";
+import getHighestCombination from "./getHighestCombination.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json");
@@ -43,22 +47,23 @@ async function getImplicitPromotions(context, shopId, currentTime) {
 }
 
 /**
- * @summary create the cart message
- * @param {String} params.title - The message title
- * @param {String} params.message - The message body
- * @param {String} params.severity - The message severity
- * @returns {Object} - The cart message
+ * @summary get all explicit promotions by Ids
+ * @param {Object} context - The application context
+ * @param {String} shopId - The shop ID
+ * @param {Array<string>} promotionIds - The promotion IDs
+ * @returns {Promise<Array<Object>>} - An array of promotions
  */
-export function createCartMessage({ title, message, severity = "info", ...params }) {
-  return {
-    _id: Random.id(),
-    title,
-    message,
-    severity,
-    acknowledged: false,
-    requiresReadAcknowledgement: true,
-    ...params
-  };
+async function getExplicitPromotionsByIds(context, shopId, promotionIds) {
+  const now = new Date();
+  const { collections: { Promotions } } = context;
+  const promotions = await Promotions.find({
+    _id: { $in: promotionIds },
+    shopId,
+    enabled: true,
+    triggerType: "explicit",
+    startDate: { $lt: now }
+  }).toArray();
+  return promotions;
 }
 
 /**
@@ -100,33 +105,34 @@ export async function getCurrentTime(context, shopId) {
 export default async function applyPromotions(context, cart) {
   const currentTime = await getCurrentTime(context, cart.shopId);
   const promotions = await getImplicitPromotions(context, cart.shopId, currentTime);
-  const { promotions: pluginPromotions, simpleSchemas: { Cart, CartPromotionItem } } = context;
+  const { promotions: pluginPromotions, simpleSchemas: { Cart } } = context;
 
-  const triggerHandleByKey = _.keyBy(pluginPromotions.triggers, "key");
-  const actionHandleByKey = _.keyBy(pluginPromotions.actions, "key");
+  const appliedExplicitPromotionsIds = _.map(_.filter(cart.appliedPromotions || [], ["triggerType", "explicit"]), "_id");
+  const explicitPromotions = await getExplicitPromotionsByIds(context, cart.shopId, appliedExplicitPromotionsIds);
 
-  const appliedPromotions = [];
-  const appliedExplicitPromotions = _.filter(cart.appliedPromotions || [], ["triggerType", "explicit"]);
+  const unqualifiedPromotions = promotions.concat(_.map(explicitPromotions, (promotion) => {
+    const existsPromotion = _.find(cart.appliedPromotions || [], { _id: promotion._id });
+    if (existsPromotion) promotion.relatedCoupon = existsPromotion.relatedCoupon || undefined;
+    if (typeof existsPromotion?.newlyAdded !== "undefined") promotion.newlyAdded = existsPromotion.newlyAdded;
+    return promotion;
+  }));
 
-  const cartMessages = cart.messages || [];
-
-  const unqualifiedPromotions = promotions.concat(appliedExplicitPromotions);
+  const newlyAddedPromotionId = _.find(unqualifiedPromotions, "newlyAdded")?._id;
 
   for (const { cleanup } of pluginPromotions.actions) {
     cleanup && await cleanup(context, cart);
   }
 
-  const canAddToCartMessages = (promotion) => {
-    if (_.find(cartMessages, { metaFields: { promotionId: promotion._id } })) return false;
-    if (promotion.triggerType === "explicit") return true;
-    return _.find(cart.appliedPromotions || [], { _id: promotion._id }) !== undefined;
-  };
+  const applicablePromotions = [];
+  const enhancedCart = enhanceCart(context, pluginPromotions.enhancers, cart);
+  if (enhancedCart.appliedPromotions) {
+    enhancedCart.appliedPromotions.length = 0;
+  }
 
-  let enhancedCart = enhanceCart(context, pluginPromotions.enhancers, cart);
   for (const promotion of unqualifiedPromotions) {
     if (!promotion.enabled) {
-      if (canAddToCartMessages(promotion)) {
-        cartMessages.push(createCartMessage({
+      if (canAddToCartMessages(cart, promotion)) {
+        enhancedCart.messages.push(createCartMessage({
           title: "The promotion no longer available",
           subject: "promotion",
           severity: "warning",
@@ -140,8 +146,8 @@ export default async function applyPromotions(context, cart) {
 
     if (isPromotionExpired(promotion)) {
       Logger.info({ ...logCtx, promotionId: promotion._id }, "Promotion is expired, skipping");
-      if (canAddToCartMessages(promotion)) {
-        cartMessages.push(createCartMessage({
+      if (canAddToCartMessages(cart, promotion)) {
+        enhancedCart.messages.push(createCartMessage({
           title: "The promotion has expired",
           subject: "promotion",
           severity: "warning",
@@ -153,13 +159,13 @@ export default async function applyPromotions(context, cart) {
       continue;
     }
 
-    const { qualifies, reason } = await canBeApplied(context, cart, { appliedPromotions, promotion });
-    if (!qualifies) {
-      if (canAddToCartMessages(promotion)) {
-        cartMessages.push(createCartMessage({
-          title: "The promotion cannot be applied",
+    const isPassesTrigger = await triggerHandler(context, enhancedCart, promotion);
+    if (!isPassesTrigger) {
+      Logger.info({ ...logCtx, promotionId: promotion._id }, "The promotion is not eligible, skipping");
+      if (canAddToCartMessages(cart, promotion)) {
+        enhancedCart.messages.push(createCartMessage({
+          title: "The promotion is not eligible",
           subject: "promotion",
-          message: reason,
           severity: "warning",
           metaFields: {
             promotionId: promotion._id
@@ -169,72 +175,40 @@ export default async function applyPromotions(context, cart) {
       continue;
     }
 
-    for (const trigger of promotion.triggers) {
-      const { triggerKey, triggerParameters } = trigger;
-      const triggerFn = triggerHandleByKey[triggerKey];
-      if (!triggerFn) continue;
-
-      const shouldApply = await triggerFn.handler(context, enhancedCart, { promotion, triggerParameters });
-      if (!shouldApply) {
-        Logger.info({ ...logCtx, promotionId: promotion._id }, "The promotion is not eligible, skipping");
-        if (canAddToCartMessages(promotion)) {
-          cartMessages.push(createCartMessage({
-            title: "The promotion is not eligible",
-            subject: "promotion",
-            severity: "warning",
-            metaFields: {
-              promotionId: promotion._id
-            }
-          }));
-        }
-        continue;
-      }
-
-      let affected = false;
-      let rejectedReason;
-      for (const action of promotion.actions) {
-        const actionFn = actionHandleByKey[action.actionKey];
-        if (!actionFn) continue;
-
-        const result = await actionFn.handler(context, enhancedCart, { promotion, ...action });
-        ({ affected, reason: rejectedReason } = result);
-        enhancedCart = enhanceCart(context, pluginPromotions.enhancers, enhancedCart);
-      }
-
-      if (affected) {
-        const affectedPromotion = _.cloneDeep(promotion);
-        CartPromotionItem.clean(affectedPromotion);
-        appliedPromotions.push(affectedPromotion);
-        continue;
-      }
-
-      if (canAddToCartMessages(promotion)) {
-        cartMessages.push(createCartMessage({
-          title: "The promotion was not affected",
-          subject: "promotion",
-          message: rejectedReason,
-          severity: "warning",
-          metaFields: {
-            promotionId: promotion._id
-          }
-        }));
-      }
-      break;
-    }
+    applicablePromotions.push(promotion);
   }
 
-  enhancedCart.appliedPromotions = appliedPromotions;
+  let highestPromotions = applicablePromotions;
+  if (pluginPromotions.getCombinationOfPromotions) {
+    const filteredPromotions = _.filter(
+      applicablePromotions,
+      (promotion) => !_.some(pluginPromotions.combinationFilters, (filter) => filter.handler(context, promotion))
+    );
+    const exceptedPromotions = _.differenceBy(applicablePromotions, filteredPromotions, "_id");
+    const combinationPromotions = await pluginPromotions.getCombinationOfPromotions(context, enhancedCart, filteredPromotions);
+    highestPromotions = await getHighestCombination(context, enhancedCart, combinationPromotions);
+    highestPromotions = highestPromotions.concat(exceptedPromotions);
+  }
+
+  await applyCombinationPromotions(context, enhancedCart, { promotions: highestPromotions });
+
+  enhancedCart.appliedPromotions = _.map(enhancedCart.appliedPromotions, (promotion) => _.omit(promotion, "newlyAdded"));
+
+  // If a explicit promotion was just applied, throw an error so that the client can display the message
+  if (newlyAddedPromotionId) {
+    const message = _.find(enhancedCart.messages, ({ metaFields }) => metaFields.promotionId === newlyAddedPromotionId);
+    if (message) throw new ReactionError("invalid-params", message.message);
+  }
 
   // Remove messages that are no longer relevant
-  const cleanedMessages = _.filter(cartMessages, (message) => {
+  enhancedCart.messages = _.filter(enhancedCart.messages, (message) => {
     if (message.subject !== "promotion") return true;
-    return _.find(appliedPromotions, { _id: message.metaFields.promotionId, triggerType: "implicit" }) === undefined;
+    return _.find(enhancedCart.appliedPromotions, { _id: message.metaFields.promotionId, triggerType: "implicit" }) === undefined;
   });
 
-  enhancedCart.messages = cleanedMessages;
   Cart.clean(enhancedCart, { mutate: true });
   Object.assign(cart, enhancedCart);
 
-  Logger.info({ ...logCtx, appliedPromotions: appliedPromotions.length }, "Applied promotions successfully");
+  Logger.info({ ...logCtx, appliedPromotions: enhancedCart.appliedPromotions.length }, "Applied promotions successfully");
   return cart;
 }
