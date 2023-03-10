@@ -192,7 +192,7 @@ export default async function applyPromotions(context, cart) {
     const differencePromotions = _.differenceBy(applicablePromotions, highestPromotions, "_id");
     for (const diffPromotion of differencePromotions) {
       if (_.findIndex(cart.appliedPromotions, { _id: diffPromotion._id }) !== -1) {
-        const message = "The promotion has replace by other promotion with highest discount";
+        const message = "The promotion has been replaced by another promotion with the highest discount";
         Logger.info({ ...logCtx, promotionId: diffPromotion._id }, message);
         enhancedCart.messages.push(createCartMessage({
           title: message,
