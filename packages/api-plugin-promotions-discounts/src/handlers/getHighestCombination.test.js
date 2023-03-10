@@ -1,11 +1,6 @@
 import mockContext from "@reactioncommerce/api-utils/tests/mockContext.js";
-import enhanceCart from "../utils/enhanceCart.js";
 import getHighestCombination from "./getHighestCombination.js";
-import actionHandler from "./actionHandler.js";
 
-jest.mock("../utils/enhanceCart.js", () => jest.fn().mockName("enhanceCart"));
-jest.mock("./actionHandler.js", () => jest.fn().mockName("actionHandler"));
-jest.mock("../utils/enhanceCart.js", () => jest.fn().mockName("enhanceCart"));
 
 test("should return the highest combination of promotions", async () => {
   const cart = {
@@ -37,16 +32,17 @@ test("should return the highest combination of promotions", async () => {
     ]
   ];
 
-  enhanceCart.mockImplementation((_, __, _cart) => _cart);
-  actionHandler.mockImplementation((context, _cart, promo) => {
-    _cart.items.forEach((item) => {
-      item.subtotal.discount += promo.discount;
-    });
-    return { affected: true };
-  });
-
   mockContext.promotions = {
-    enhancers: []
+    enhancers: [],
+    utils: {
+      enhanceCart: jest.fn().mockImplementation((_, __, _cart) => _cart),
+      actionHandler: jest.fn().mockImplementation((context, _cart, promo) => {
+        _cart.items.forEach((item) => {
+          item.subtotal.discount += promo.discount;
+        });
+        return { affected: true };
+      })
+    }
   };
 
   const result = await getHighestCombination(mockContext, cart, combinations);

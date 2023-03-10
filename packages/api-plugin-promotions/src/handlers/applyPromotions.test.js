@@ -1,15 +1,14 @@
 import mockContext from "@reactioncommerce/api-utils/tests/mockContext.js";
 import canBeApplied from "../utils/canBeApplied.js";
 import isPromotionExpired from "../utils/isPromotionExpired.js";
-import triggerHandler from "./triggerHandler.js";
+import triggerHandler from "../utils/triggerHandler.js";
 import applyCombinationPromotions from "./applyCombinationPromotions.js";
 import applyPromotions, { getCurrentTime } from "./applyPromotions.js";
 
+jest.mock("./applyCombinationPromotions.js", () => jest.fn());
 jest.mock("../utils/canBeApplied.js", () => jest.fn());
 jest.mock("../utils/isPromotionExpired.js", () => jest.fn());
-jest.mock("./applyCombinationPromotions.js", () => jest.fn());
-jest.mock("./actionHandler.js", () => jest.fn());
-jest.mock("./triggerHandler.js", () => jest.fn());
+jest.mock("../utils/triggerHandler.js", () => jest.fn());
 
 const testTrigger = jest.fn().mockReturnValue(Promise.resolve(true));
 const testAction = jest.fn();

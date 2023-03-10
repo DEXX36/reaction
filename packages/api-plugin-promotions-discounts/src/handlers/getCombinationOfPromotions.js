@@ -21,24 +21,28 @@ export default async function getCombinationOfPromotions(context, cart, promotio
     const combination = stack.pop();
     combinations.push(combination);
 
-    const startPos = implicitPromotions.indexOf(combination[combination.length - 1]) + 1 || 0;
+    const nextPosition = implicitPromotions.indexOf(_.last(combination)) + 1 || 0;
     // eslint-disable-next-line no-plusplus
-    for (let pos = startPos; pos < implicitPromotions.length; pos++) {
-      const promotion = implicitPromotions[pos];
+    for (let position = nextPosition; position < implicitPromotions.length; position++) {
+      const promotion = implicitPromotions[position];
       const { qualifies } = await utils.canBeApplied(context, cart, { appliedPromotions: combination, promotion });
       if (qualifies) {
-        const tempArray = [...combination, promotion];
-        const subsets = combinations.filter((result) => _.differenceBy(result, tempArray, "id").length === 0);
-        combinations = combinations.filter((result) => !subsets.includes(result));
-        stack.push(tempArray);
+        const newCombination = [...combination, promotion];
+        stack.push(newCombination);
         continue;
       }
 
-      if (!combinations.some((comb) => comb.length === 1 && comb[0].id === promotion.id)) {
+      if (!combinations.some((comb) => comb.length === 1 && comb[0]._id === promotion._id)) {
         combinations.push([promotion]);
       }
     }
   }
+
+  // remove combination if is a subset of another combinations
+  combinations = combinations.filter((combination) => !combinations.some((otherCombination) => {
+    if (combination === otherCombination) return false;
+    return _.differenceBy(combination, otherCombination, "_id").length === 0;
+  }));
 
   return combinations;
 }

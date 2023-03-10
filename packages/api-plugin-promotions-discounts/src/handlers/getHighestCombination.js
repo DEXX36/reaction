@@ -1,6 +1,4 @@
 import _ from "lodash";
-import enhanceCart from "../utils/enhanceCart.js";
-import actionHandler from "./actionHandler.js";
 
 /**
  * @summary get the total discount on the cart
@@ -19,15 +17,15 @@ function getTotalDiscountOnCart(cart) {
  * @returns {Promise<Array<Object>>} - The highest combination
  */
 export default async function getHighestCombination(context, cart, combinations) {
-  const { promotions: { enhancers } } = context;
+  const { promotions: { enhancers, utils } } = context;
 
   const tasks = combinations.map(async (combinationPromotions) => {
     let copiedCart = _.cloneDeep(cart);
     for (const promo of combinationPromotions) {
       // eslint-disable-next-line no-await-in-loop
-      const { affected, temporaryAffected } = await actionHandler(context, copiedCart, promo);
+      const { affected, temporaryAffected } = await utils.actionHandler(context, copiedCart, promo);
       if (!affected || temporaryAffected) continue;
-      copiedCart = enhanceCart(context, enhancers, copiedCart);
+      copiedCart = utils.enhanceCart(context, enhancers, copiedCart);
     }
     const totalDiscount = getTotalDiscountOnCart(copiedCart);
     return { totalDiscount, promotions: combinationPromotions };

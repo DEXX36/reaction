@@ -1,59 +1,58 @@
 import mockContext from "@reactioncommerce/api-utils/tests/mockContext.js";
 import getCombinationOfPromotions from "./getCombinationOfPromotions.js";
 
-test("should return the best promotions", async () => {
-  const cart = {
-    _id: "cartId",
-    shopId: "shopId",
-    items: [
-      {
-        _id: "itemId",
-        productId: "productId",
-        variantId: "variantId",
-        quantity: 1,
-        price: {
-          amount: 10,
-          currencyCode: "USD"
-        },
-        subtotal: {
-          amount: 10,
-          currencyCode: "USD"
-        }
-      }
-    ]
-  };
-  const promotions = [
-    {
-      _id: "promotionId1",
-      triggerType: "implicit",
-      discount: 2,
-      stackability: {
-        key: "all"
-      }
-    },
-    {
-      _id: "promotionId2",
-      triggerType: "implicit",
-      discount: 3,
-      stackability: {
-        key: "none"
-      }
-    },
-    {
-      _id: "promotionId3",
-      triggerType: "explicit",
-      discount: 4,
-      stackability: {
-        key: "all"
-      }
-    }
-  ];
+const mockCart = {
+  _id: "cartId"
+};
 
-  const canBeApplied = jest.fn().mockImplementation((_, __, { promotion }) => {
-    if (promotion._id === "promotionId1") return { qualifies: true };
-    if (promotion._id === "promotionId2") return { qualifies: false, reason: "does not qualify" };
+test("should return the best promotions", async () => {
+  const promotion1 = {
+    _id: "promotionId1",
+    triggerType: "implicit",
+    discount: 2,
+    type: "order",
+    stackability: {
+      key: "all"
+    }
+  };
+
+  const promotion2 = {
+    _id: "promotionId2",
+    triggerType: "implicit",
+    discount: 3,
+    type: "item",
+    stackability: {
+      key: "none"
+    }
+  };
+
+  const promotion3 = {
+    _id: "promotionId3",
+    triggerType: "explicit",
+    discount: 4,
+    type: "order",
+    stackability: {
+      key: "all"
+    }
+  };
+
+  const mockPromotions = [promotion1, promotion2, promotion3];
+
+  const stackabilities = {
+    all: () => true,
+    none: () => false
+  };
+
+  const stackabilityQualifier = (_, __, { appliedPromotions, promotion }) => {
+    for (const appliedPromotion of appliedPromotions) {
+      const result = stackabilities[promotion.stackability.key]();
+      const appliedResult = stackabilities[appliedPromotion.stackability.key]();
+      if (!result || !appliedResult) return { qualifies: false };
+    }
     return { qualifies: true };
-  });
+  };
+
+  const canBeApplied = jest.fn().mockImplementation(stackabilityQualifier);
 
   mockContext.promotions = {
     enhancers: [],
@@ -63,9 +62,82 @@ test("should return the best promotions", async () => {
     }
   };
 
-  const result = await getCombinationOfPromotions(mockContext, cart, promotions);
+  const result = await getCombinationOfPromotions(mockContext, mockCart, mockPromotions);
+  expect(result).toEqual([[promotion2], [promotion3, promotion1]]);
+});
+
+test("should return the best promotions with more promotions", async () => {
+  const promotion1 = {
+    _id: "promotionId1",
+    triggerType: "implicit",
+    discount: 2,
+    type: "order",
+    stackability: {
+      key: "all"
+    }
+  };
+
+  const promotion2 = {
+    _id: "promotionId2",
+    triggerType: "implicit",
+    discount: 3,
+    type: "item",
+    stackability: {
+      key: "all"
+    }
+  };
+
+  const promotion3 = {
+    _id: "promotionId3",
+    triggerType: "implicit",
+    discount: 4,
+    type: "item",
+    stackability: {
+      key: "all"
+    }
+  };
+
+  const promotion4 = {
+    _id: "promotionId4",
+    triggerType: "implicit",
+    discount: 4,
+    type: "item",
+    stackability: {
+      key: "per-type"
+    }
+  };
+
+  const mockPromotions = [promotion1, promotion2, promotion3, promotion4];
+
+  const stackabilities = {
+    "all": () => true,
+    "none": () => false,
+    "per-type": (promo1, promo2) => promo1.type !== promo2.type
+  };
+
+  const stackabilityQualifier = (_, __, { appliedPromotions, promotion }) => {
+    for (const appliedPromotion of appliedPromotions) {
+      const result = stackabilities[promotion.stackability.key](appliedPromotion, promotion);
+      const appliedResult = stackabilities[appliedPromotion.stackability.key](promotion, appliedPromotion);
+
+      if (!result || !appliedResult) return { qualifies: false };
+    }
+    return { qualifies: true };
+  };
+
+  const canBeApplied = jest.fn().mockImplementation(stackabilityQualifier);
+
+  mockContext.promotions = {
+    enhancers: [],
+    qualifiers: [],
+    utils: {
+      canBeApplied
+    }
+  };
+
+  const result = await getCombinationOfPromotions(mockContext, mockCart, mockPromotions);
   expect(result).toEqual([
-    [promotions[1]],
-    [promotions[2], promotions[0]]
+    [promotion1, promotion4],
+    [promotion1, promotion2, promotion3]
   ]);
 });

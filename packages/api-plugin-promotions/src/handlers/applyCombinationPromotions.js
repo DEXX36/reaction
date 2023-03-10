@@ -4,7 +4,7 @@ import canAddToCartMessages from "../utils/canAddCartMessage.js";
 import canBeApplied from "../utils/canBeApplied.js";
 import createCartMessage from "../utils/createCartMessage.js";
 import enhanceCart from "../utils/enhanceCart.js";
-import actionHandler from "./actionHandler.js";
+import actionHandler from "../utils/actionHandler.js";
 
 /**
  * @summary a handler for the "combination" type of promotion

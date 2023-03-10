@@ -59,7 +59,7 @@ const PromotionsDeclaration = new SimpleSchema({
   },
   "allowOperators": Array,
   "allowOperators.$": String,
-  "getCombinationOfPromotions": Function,
+  "getApplicablePromotions": Function,
   "combinationFilters": Array,
   "combinationFilters.$": {
     type: Object,
@@ -80,7 +80,7 @@ export const promotions = {
   qualifiers: [],
   promotionTypes: [],
   stackabilities: [],
-  getCombinationOfPromotions: () => {},
+  getApplicablePromotions: () => {},
   combinationFilters: [],
   allowOperators: ["equal", "notEqual", "lessThan", "lessThanInclusive", "greaterThan", "greaterThanInclusive", "in", "notIn", "contains", "doesNotContain"],
   utils: {}
@@ -102,7 +102,7 @@ export function registerPluginHandlerForPromotions({ promotions: pluginPromotion
       qualifiers,
       stackabilities,
       promotionTypes,
-      getCombinationOfPromotions,
+      getApplicablePromotions,
       combinationFilters,
       utils
     } = pluginPromotions;
@@ -130,8 +130,8 @@ export function registerPluginHandlerForPromotions({ promotions: pluginPromotion
     if (promotionTypes) {
       promotions.promotionTypes = promotions.promotionTypes.concat(promotionTypes);
     }
-    if (getCombinationOfPromotions) {
-      promotions.getCombinationOfPromotions = getCombinationOfPromotions;
+    if (getApplicablePromotions) {
+      promotions.getApplicablePromotions = getApplicablePromotions;
     }
     if (combinationFilters) {
       promotions.combinationFilters = _.uniqBy(promotions.combinationFilters.concat(combinationFilters), "key");

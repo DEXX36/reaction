@@ -7,9 +7,8 @@ import enhanceCart from "../utils/enhanceCart.js";
 import isPromotionExpired from "../utils/isPromotionExpired.js";
 import createCartMessage from "../utils/createCartMessage.js";
 import canAddToCartMessages from "../utils/canAddCartMessage.js";
-import triggerHandler from "./triggerHandler.js";
+import triggerHandler from "../utils/triggerHandler.js";
 import applyCombinationPromotions from "./applyCombinationPromotions.js";
-import getHighestCombination from "./getHighestCombination.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json");
@@ -123,7 +122,7 @@ export default async function applyPromotions(context, cart) {
     cleanup && await cleanup(context, cart);
   }
 
-  const applicablePromotions = [];
+  const qualifiedPromotions = [];
   const enhancedCart = enhanceCart(context, pluginPromotions.enhancers, cart);
   if (enhancedCart.appliedPromotions) {
     enhancedCart.appliedPromotions.length = 0;
@@ -159,8 +158,8 @@ export default async function applyPromotions(context, cart) {
       continue;
     }
 
-    const isPassesTrigger = await triggerHandler(context, enhancedCart, promotion);
-    if (!isPassesTrigger) {
+    const isTriggerPassed = await triggerHandler(context, enhancedCart, promotion);
+    if (!isTriggerPassed) {
       Logger.info({ ...logCtx, promotionId: promotion._id }, "The promotion is not eligible, skipping");
       if (canAddToCartMessages(cart, promotion)) {
         enhancedCart.messages.push(createCartMessage({
@@ -175,24 +174,18 @@ export default async function applyPromotions(context, cart) {
       continue;
     }
 
-    applicablePromotions.push(promotion);
+    qualifiedPromotions.push(promotion);
   }
 
-  let highestPromotions = applicablePromotions;
-  if (pluginPromotions.getCombinationOfPromotions) {
-    const filteredPromotions = _.filter(
-      applicablePromotions,
-      (promotion) => !_.some(pluginPromotions.combinationFilters, (filter) => filter.handler(context, promotion))
-    );
-    const exceptedPromotions = _.differenceBy(applicablePromotions, filteredPromotions, "_id");
-    const combinationPromotions = await pluginPromotions.getCombinationOfPromotions(context, enhancedCart, filteredPromotions);
-    highestPromotions = await getHighestCombination(context, enhancedCart, combinationPromotions);
-    highestPromotions = highestPromotions.concat(exceptedPromotions);
 
-    const differencePromotions = _.differenceBy(applicablePromotions, highestPromotions, "_id");
+  let applicablePromotions = qualifiedPromotions;
+  if (pluginPromotions.getApplicablePromotions) {
+    applicablePromotions = await pluginPromotions.getApplicablePromotions(context, enhancedCart, qualifiedPromotions);
+
+    const differencePromotions = _.differenceBy(qualifiedPromotions, applicablePromotions, "_id");
     for (const diffPromotion of differencePromotions) {
       if (_.findIndex(cart.appliedPromotions, { _id: diffPromotion._id }) !== -1) {
-        const message = "The promotion has been replaced by another promotion with the highest discount";
+        const message = "The promotion has been replaced by another promotion group that offers the highest discount";
         Logger.info({ ...logCtx, promotionId: diffPromotion._id }, message);
         enhancedCart.messages.push(createCartMessage({
           title: message,
@@ -207,7 +200,7 @@ export default async function applyPromotions(context, cart) {
     }
   }
 
-  await applyCombinationPromotions(context, enhancedCart, { promotions: highestPromotions });
+  await applyCombinationPromotions(context, enhancedCart, { promotions: applicablePromotions });
 
   enhancedCart.appliedPromotions = _.map(enhancedCart.appliedPromotions, (promotion) => _.omit(promotion, "newlyAdded"));
 
