@@ -1,5 +1,5 @@
 import mockContext from "@reactioncommerce/api-utils/tests/mockContext.js";
-import getCombinationOfPromotions from "./getCombinationOfPromotions.js";
+import getPromotionCombinations from "./getPromotionCombinations.js";
 
 const mockCart = {
   _id: "cartId"
@@ -62,7 +62,7 @@ test("should return the best promotions", async () => {
     }
   };
 
-  const result = await getCombinationOfPromotions(mockContext, mockCart, mockPromotions);
+  const result = await getPromotionCombinations(mockContext, mockCart, mockPromotions);
   expect(result).toEqual([[promotion2], [promotion3, promotion1]]);
 });
 
@@ -135,7 +135,7 @@ test("should return the best promotions with more promotions", async () => {
     }
   };
 
-  const result = await getCombinationOfPromotions(mockContext, mockCart, mockPromotions);
+  const result = await getPromotionCombinations(mockContext, mockCart, mockPromotions);
   expect(result).toEqual([
     [promotion1, promotion4],
     [promotion1, promotion2, promotion3]

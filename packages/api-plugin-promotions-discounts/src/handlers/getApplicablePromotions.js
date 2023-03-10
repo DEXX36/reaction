@@ -1,5 +1,5 @@
 import _ from "lodash";
-import getCombinationOfPromotions from "./getCombinationOfPromotions.js";
+import getPromotionCombinations from "./getPromotionCombinations.js";
 import getHighestCombination from "./getHighestCombination.js";
 
 /**
@@ -14,8 +14,8 @@ export default async function getApplicablePromotions(context, cart, promotions)
 
   const filteredPromotions = _.filter(promotions, (promotion) => !_.some(combinationFilters, (filter) => filter.handler(context, promotion)));
   const exceptedPromotions = _.differenceBy(promotions, filteredPromotions, "_id");
-  const combinationPromotions = await getCombinationOfPromotions(context, cart, filteredPromotions);
-  const highestPromotions = await getHighestCombination(context, cart, combinationPromotions);
+  const promotionCombinations = await getPromotionCombinations(context, cart, filteredPromotions);
+  const highestPromotions = await getHighestCombination(context, cart, promotionCombinations);
   const applicablePromotions = highestPromotions.concat(exceptedPromotions);
 
   return applicablePromotions;

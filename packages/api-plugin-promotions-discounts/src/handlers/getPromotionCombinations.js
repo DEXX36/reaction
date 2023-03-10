@@ -6,9 +6,9 @@ import _ from "lodash";
  * @param {Object} context - The application context
  * @param {Object} cart - The cart to apply the promotion to
  * @param {Array<Object>} promotions - The promotions to apply
- * @returns {Promise<Object>} - The best promotions
+ * @returns {Promise<Object>} - The combination of promotions
  */
-export default async function getCombinationOfPromotions(context, cart, promotions) {
+export default async function getPromotionCombinations(context, cart, promotions) {
   const { promotions: { utils } } = context;
 
   const explicitPromotions = promotions.filter((promotion) => promotion.triggerType === "explicit");
