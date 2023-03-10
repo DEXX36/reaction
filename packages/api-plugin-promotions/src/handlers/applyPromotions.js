@@ -188,6 +188,23 @@ export default async function applyPromotions(context, cart) {
     const combinationPromotions = await pluginPromotions.getCombinationOfPromotions(context, enhancedCart, filteredPromotions);
     highestPromotions = await getHighestCombination(context, enhancedCart, combinationPromotions);
     highestPromotions = highestPromotions.concat(exceptedPromotions);
+
+    const differencePromotions = _.differenceBy(applicablePromotions, highestPromotions, "_id");
+    for (const diffPromotion of differencePromotions) {
+      if (_.findIndex(cart.appliedPromotions, { _id: diffPromotion._id }) !== -1) {
+        const message = "The promotion has replace by other promotion with highest discount";
+        Logger.info({ ...logCtx, promotionId: diffPromotion._id }, message);
+        enhancedCart.messages.push(createCartMessage({
+          title: message,
+          message,
+          subject: "promotion",
+          severity: "info",
+          metaFields: {
+            promotionId: diffPromotion._id
+          }
+        }));
+      }
+    }
   }
 
   await applyCombinationPromotions(context, enhancedCart, { promotions: highestPromotions });
