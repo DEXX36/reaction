@@ -60,11 +60,6 @@ const PromotionsDeclaration = new SimpleSchema({
   "allowOperators": Array,
   "allowOperators.$": String,
   "getApplicablePromotions": Function,
-  "combinationFilters": Array,
-  "combinationFilters.$": {
-    type: Object,
-    blackbox: true
-  },
   "utils": {
     type: Object,
     blackbox: true
@@ -81,7 +76,6 @@ export const promotions = {
   promotionTypes: [],
   stackabilities: [],
   getApplicablePromotions: () => {},
-  combinationFilters: [],
   allowOperators: ["equal", "notEqual", "lessThan", "lessThanInclusive", "greaterThan", "greaterThanInclusive", "in", "notIn", "contains", "doesNotContain"],
   utils: {}
 };
@@ -93,19 +87,8 @@ export const promotions = {
  */
 export function registerPluginHandlerForPromotions({ promotions: pluginPromotions }) {
   if (pluginPromotions) {
-    const {
-      triggers,
-      actions,
-      enhancers,
-      schemaExtensions,
-      operators,
-      qualifiers,
-      stackabilities,
-      promotionTypes,
-      getApplicablePromotions,
-      combinationFilters,
-      utils
-    } = pluginPromotions;
+    const { triggers, actions, enhancers, schemaExtensions, operators, qualifiers, stackabilities, promotionTypes, getApplicablePromotions, utils } =
+      pluginPromotions;
     if (triggers) {
       promotions.triggers = _.uniqBy(promotions.triggers.concat(triggers), "key");
     }
@@ -132,9 +115,6 @@ export function registerPluginHandlerForPromotions({ promotions: pluginPromotion
     }
     if (getApplicablePromotions) {
       promotions.getApplicablePromotions = getApplicablePromotions;
-    }
-    if (combinationFilters) {
-      promotions.combinationFilters = _.uniqBy(promotions.combinationFilters.concat(combinationFilters), "key");
     }
     if (utils) {
       promotions.utils = { ...promotions.utils, ...utils };

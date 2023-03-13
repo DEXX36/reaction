@@ -2,6 +2,8 @@ import _ from "lodash";
 import getPromotionCombinations from "./getPromotionCombinations.js";
 import getHighestCombination from "./getHighestCombination.js";
 
+const discountCalculationMethodOrder = ["flat", "percentage", "fixed", "none"];
+
 /**
  * @summary get all applicable promotions
  * @param {*} context - The application context
@@ -10,13 +12,17 @@ import getHighestCombination from "./getHighestCombination.js";
  * @returns {Promise<Array<Object>>} - An array of promotions
  */
 export default async function getApplicablePromotions(context, cart, promotions) {
-  const { promotions: { combinationFilters } } = context;
+  const promotionsWithoutShippingDiscount = _.filter(promotions, (promotion) => promotion.promotionType !== "shipping-discount");
+  const shippingPromotions = _.differenceBy(promotions, promotionsWithoutShippingDiscount, "_id");
 
-  const filteredPromotions = _.filter(promotions, (promotion) => !_.some(combinationFilters, (filter) => filter.handler(context, promotion)));
-  const exceptedPromotions = _.differenceBy(promotions, filteredPromotions, "_id");
-  const promotionCombinations = await getPromotionCombinations(context, cart, filteredPromotions);
+  const sortedPromotions = _.sortBy(promotionsWithoutShippingDiscount, (promotion) => {
+    const method = promotion.actions[0]?.actionParameters?.discountCalculationMethod || "none";
+    return discountCalculationMethodOrder.indexOf(method);
+  });
+
+  const promotionCombinations = await getPromotionCombinations(context, cart, sortedPromotions);
   const highestPromotions = await getHighestCombination(context, cart, promotionCombinations);
-  const applicablePromotions = highestPromotions.concat(exceptedPromotions);
+  const applicablePromotions = highestPromotions.concat(shippingPromotions);
 
   return applicablePromotions;
 }
